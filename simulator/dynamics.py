@@ -135,12 +135,11 @@ def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
     Simulation of pedestrian models
 
     Inputs:
-        shift_fn (func)             : returned by jax_md.space
-        displacement_fn (func)      : returned by jax_md.space
-        energy_or_force_fn (func)   : a function characterizing the interaction between
+        shift_fn (func)            : returned by jax_md.space
+        energy_or_force_fn (func)  : a function characterizing the interaction between
                                     pedestrians
-        dt (float)      : Floating point number specifying the timescale (step size) of the simulation.
-        N (int)         : Integer number specifying the number of particles in the simulation
+        dt (float)     : Floating point number specifying the timescale (step size) of the simulation.
+        N (int)        : Integer number specifying the number of particles in the simulation
 
     Outputs:
         init_fn, step_fn (funcs): functions to initialize the simulation and to timestep
