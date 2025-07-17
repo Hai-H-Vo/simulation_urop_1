@@ -79,7 +79,7 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
 
         # rendering: USE COLOR TO ENCODE POLARIZATION/ ANGLE OF PARTICLES.
         particle_plot = ax.scatter(
-            curr_x, curr_y, c=curr_theta, s=0.005, cmap="hsv", vmin=ex_min, vmax=ex_max
+            curr_x, curr_y, c=curr_theta, s = 1, cmap="hsv", vmin=ex_min, vmax=ex_max
         )
         timer = ax.text(
             0.5,

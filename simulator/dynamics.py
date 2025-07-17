@@ -17,39 +17,13 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
+from .utils import normal, align_tot, angle_correct, init_velocity
 
-# DYNAMICS
-
-@vmap
-def angle_sum(theta1, theta2):
-    init_theta = theta1 + theta2
-    return np.where(
-        init_theta < 0,
-        init_theta + 2 * onp.pi,
-        np.where(init_theta > 2 * onp.pi, init_theta - 2 * onp.pi, init_theta),
-    )
 
 # CHIRAL PARTICLES
 
-@vmap
-def normal(v, theta):
-  return np.array([v * np.cos(theta), v * np.sin(theta)])
 
-def align_fn(dr, theta_i, theta_j):
-   align_spd = np.sin(theta_j - theta_i)
-   dR = space.distance(dr)
-   return np.where(dR < 1., align_spd, 0.)
-
-def align_tot(R, theta, displacement):
-   # Alignment factor
-   align = vmap(vmap(align_fn, (0, None, 0)), (0, 0, None))
-
-   # Displacement between all points
-   dR = space.map_product(displacement)(R, R)
-
-   return np.sum(align(dR, theta, theta), axis=1)
-
-class ChiralAMState(namedtuple('ChiralState', ['position', 'theta', 'speed', 'omega', 'key'])):
+class ChiralAMState(namedtuple('ChiralAMState', ['position', 'theta', 'speed', 'omega', 'key'])):
     pass
 
 def chiral_am(shift_fn, displacement_fn, dt, N, box_size, g = 0.018, D_r = 0.009):
@@ -61,6 +35,8 @@ def chiral_am(shift_fn, displacement_fn, dt, N, box_size, g = 0.018, D_r = 0.009
     Inputs:
         shift_fn (func): A function that displaces positions, `R`, by an amount `dR`.
             Both `R` and `dR` should be ndarrays of shape `[n, spatial_dimension]`.
+        displacement_fn (func):  A function that computes displacements between R1 and R2.
+            Both R1, R2 should be ndarrays of shape `[n, spatial_dimension]`
         dt (float): Floating point number specifying the timescale (step size) of the
             simulation.
         N (int): Integer number specifying the number of particles in the simulation
@@ -125,9 +101,77 @@ def chiral_am(shift_fn, displacement_fn, dt, N, box_size, g = 0.018, D_r = 0.009
         stheta = np.sqrt(2 * D_r * dt) * random.normal(split, state.theta.shape)
 
         return ChiralAMState(shift_fn(state.position, dR),
-                             angle_sum(state.theta, dtheta + stheta),
+                             angle_correct(state.theta + dtheta + stheta),
                              state.speed,
                              state.omega,
                              key)
+
+    return init_fn, step_fn
+
+
+# PEDESTRIAN DYNAMICS
+
+
+class PedestrianState(namedtuple("PedestrianState", ['position', 'velocity', 'radius', 'goal_velocity'])):
+    def orientation(self):
+        """Returns the orientation angle of all pedestrians"""
+        return angle_correct(np.atan2(self.position[:, 0], self.position[:, 1]))
+
+class Wall(object):
+    pass
+
+class StraightWall(Wall):
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+class CircleWall(Wall):
+    def __init__(self, center, radius):
+        self.center = center
+        self.radius = radius
+
+def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
+    """
+    Simulation of pedestrian models
+
+    Inputs:
+        shift_fn (func)             : returned by jax_md.space
+        displacement_fn (func)      : returned by jax_md.space
+        energy_or_force_fn (func)   : a function characterizing the interaction between
+                                    pedestrians
+        dt (float)      : Floating point number specifying the timescale (step size) of the simulation.
+        N (int)         : Integer number specifying the number of particles in the simulation
+
+    Outputs:
+        init_fn, step_fn (funcs): functions to initialize the simulation and to timestep
+            the simulation
+    """
+    force_fn = jit(quantity.canonicalize_force(energy_or_force_fn))
+
+    def init_fn(pos, radius, **kwargs):
+
+        # if 'goal_velocity' in kwargs:
+        #     state.goal_velocity = kwargs['goal_velocity']
+        #     state.force = force_fn
+        # else:
+        #     pass
+
+        if 'velocity' in kwargs:
+            velocity = kwargs['velocity']
+        else:
+            velocity = init_velocity(kwargs['key'], kwargs['speed_mean'], N)
+
+        return PedestrianState(pos, velocity, radius, None)
+
+
+    def step_fn(_, state):
+        dstate = force_fn(state)
+
+        return PedestrianState(
+            shift_fn(state.position, state.velocity * dt),
+            state.velocity + dstate.velocity * dt,
+            state.radius,
+            state.goal_velocity
+        )
 
     return init_fn, step_fn
