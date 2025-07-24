@@ -17,7 +17,7 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from .utils import normal, align_tot, angle_correct, init_velocity
+from utils import normal, align_tot, angle_correct, init_goal_speed
 
 
 # CHIRAL PARTICLES
@@ -112,10 +112,14 @@ def chiral_am(shift_fn, displacement_fn, dt, N, box_size, g = 0.018, D_r = 0.009
 # PEDESTRIAN DYNAMICS
 
 
-class PedestrianState(namedtuple("PedestrianState", ['position', 'velocity', 'radius', 'goal_velocity'])):
+class PedestrianState(namedtuple("PedestrianState", ['position', 'velocity', 'radius', 'goal_speed', 'goal_orientation', 'key'])):
+    def speed(self):
+        """Returns the speed of all pedestrians"""
+        return np.sqrt(self.velocity[:, 0] ** 2 + self.velocity[:, 1] ** 2)
+
     def orientation(self):
         """Returns the orientation angle of all pedestrians"""
-        return angle_correct(np.atan2(self.position[:, 0], self.position[:, 1]))
+        return angle_correct(np.atan2(self.velocity[:, 1], self.velocity[:, 0]))
 
 class Wall(object):
     pass
@@ -135,42 +139,81 @@ def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
     Simulation of pedestrian models
 
     Inputs:
-        shift_fn (func)            : returned by jax_md.space
-        energy_or_force_fn (func)  : a function characterizing the interaction between
+        shift_fn (func)             : returned by jax_md.space
+        displacement_fn (func)      : returned by jax_md.space
+        energy_or_force_fn (func)   : a function characterizing the interaction between
                                     pedestrians
-        dt (float)     : Floating point number specifying the timescale (step size) of the simulation.
-        N (int)        : Integer number specifying the number of particles in the simulation
+        dt (float)      : Floating point number specifying the timescale (step size) of the simulation.
+        N (int)         : Integer number specifying the number of particles in the simulation
 
     Outputs:
         init_fn, step_fn (funcs): functions to initialize the simulation and to timestep
             the simulation
     """
-    force_fn = jit(quantity.canonicalize_force(energy_or_force_fn))
+    # force_fn = jit(quantity.canonicalize_force(energy_or_force_fn))
+    force_fn = energy_or_force_fn
 
     def init_fn(pos, radius, **kwargs):
+        """
+        Initializes a pedestrian simulation.
 
-        # if 'goal_velocity' in kwargs:
-        #     state.goal_velocity = kwargs['goal_velocity']
-        #     state.force = force_fn
-        # else:
-        #     pass
+        Inputs:
+            pos (Array): position of all pedestrians
+            radius (float): collision radius of pedestrians
+
+        Extra Inputs:
+            key (RNG key)
+            goal_speed (Array)
+            goal_orientation (Array)
+            velocity (Array)
+
+        Output:
+            A PedestrianState instance.
+        """
+        key = kwargs['key'] if 'key' in kwargs else None
+
+        if 'goal_speed' in kwargs:
+            goal_speed = kwargs['goal_speed']
+        else:
+            if key is None:
+                raise ValueError("PRNG key required for initializing goal speed")
+            key, split = random.split(key)
+            goal_speed = init_goal_speed(split, N)
+
+        if 'goal_orientation' in kwargs:
+            goal_orientation = kwargs['goal_orientation']
+        else:
+            goal_orientation = None
 
         if 'velocity' in kwargs:
             velocity = kwargs['velocity']
+        elif goal_orientation is not None:
+            velocity = normal(goal_speed, goal_orientation)
         else:
-            velocity = init_velocity(kwargs['key'], kwargs['speed_mean'], N)
+            if key is None:
+                raise ValueError("PRNG key required for initializing goal speed")
+            key, split = random.split(key)
+            orient = random.uniform(split, (N,), minval=0, maxval=2 * onp.pi)
+            velocity = normal(goal_speed, orient)
 
-        return PedestrianState(pos, velocity, radius, None)
+
+        return PedestrianState(pos, velocity, radius, goal_speed, goal_orientation, key)
 
 
     def step_fn(_, state):
         dstate = force_fn(state)
 
+        # stochastic impl
+        key, split = random.split(state.key)
+        svelocity = random.uniform(split, (N, 2), minval=-1.0, maxval=1.0)
+
         return PedestrianState(
             shift_fn(state.position, state.velocity * dt),
-            state.velocity + dstate.velocity * dt,
+            state.velocity + (dstate.position + svelocity) * dt,
             state.radius,
-            state.goal_velocity
+            state.goal_speed,
+            state.goal_orientation,
+            key
         )
 
     return init_fn, step_fn

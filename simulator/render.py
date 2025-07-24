@@ -37,6 +37,7 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
         extra (list(array)): list of any other particle parameter
         limits (tuple(min, max)): tuple of minimum and maximum values of above param
 
+
     Output:
         {name}.mp4 file of box state, runs at 50fps
     """
@@ -47,11 +48,15 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
         states = np.array(states)
 
     R = states
+
+    # extra parameters to be graphed in colormap
     if 'extra' not in kwargs:
         extra = None
     else:
         extra = kwargs['extra']
         ex_min, ex_max = kwargs['limits']
+
+
 
     # retrieve number of frames
     frames = R.shape[0]
