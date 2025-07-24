@@ -19,9 +19,9 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force
-from render import render
-from dynamics import pedestrian, PedestrianState, StraightWall
+from simulator.utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force
+from simulator.render import render
+from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 
 
 N = 750
