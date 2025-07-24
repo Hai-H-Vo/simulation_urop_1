@@ -1,1 +1,2 @@
-The main simulation code file will be the .py files, as the Jupyter notebooks .ipynb files are outdated.
+- Simulation-related functions can be found in /simulator
+- Some Python files used to generate simulations can be found as .py files in main
