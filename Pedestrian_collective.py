@@ -75,6 +75,7 @@ state = init(pos, 0.1, key=V_key)
 positions = []
 thetas = []
 
+# for i in range(10):
 for i in range(2000):
   print(f"Current loop: {i}")
   state = lax.fori_loop(0, delta, step, state)

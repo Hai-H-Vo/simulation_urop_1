@@ -36,7 +36,8 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
     Extra inputs:
         extra (list(array)): list of any other particle parameter
         limits (tuple(min, max)): tuple of minimum and maximum values of above param
-
+        walls (list(Walls)): list of walls to render
+        size (float): size of simulated particles, measured in same unit as box_size
 
     Output:
         {name}.mp4 file of box state, runs at 50fps
@@ -56,8 +57,6 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
         extra = kwargs['extra']
         ex_min, ex_max = kwargs['limits']
 
-
-
     # retrieve number of frames
     frames = R.shape[0]
 
@@ -66,6 +65,22 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
     # formatting plot
     ax.set_xlim(0, box_size)
     ax.set_ylim(0, box_size)
+
+    # size parameter
+    if 'size' not in kwargs:
+        size = 1
+    else:
+        primitive_size = kwargs['size']
+
+        bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        width_pixels = bbox.width * fig.dpi
+        height_pixels = bbox.height * fig.dpi
+
+        x_data_per_pixel = box_size / width_pixels
+        y_data_per_pixel = box_size / height_pixels
+
+        pixel_size = primitive_size / np.mean(np.array([x_data_per_pixel, y_data_per_pixel]))
+        size = (pixel_size * (72 / fig.dpi))**2 * onp.pi
 
     # single frame rendering
     def renderer_code(frame_num=0):
@@ -84,7 +99,7 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
 
         # rendering: USE COLOR TO ENCODE POLARIZATION/ ANGLE OF PARTICLES.
         particle_plot = ax.scatter(
-            curr_x, curr_y, c=curr_theta, s = 1, cmap="hsv", vmin=ex_min, vmax=ex_max
+            curr_x, curr_y, c=curr_theta, s = size, cmap="hsv", vmin=ex_min, vmax=ex_max
         )
         timer = ax.text(
             0.5,
@@ -104,8 +119,20 @@ def render(box_size, states, dt, DELTA, name="default", **kwargs):
     # COLORBAR FOR ANGLE
     fig.colorbar(artists[0][0])
 
+    # WALL RENDERING
+    if 'walls' in kwargs:
+        walls = kwargs['walls']
+        for wall in walls:
+            start = wall.start
+            end = wall.end
+            x_wall = [start[0], end[0]]
+            y_wall = [start[1], end[1]]
+            ax.plot(x_wall, y_wall, 'k')
+
     # build the animation
     anim = ani.ArtistAnimation(fig, artists, interval=20, repeat_delay=1000, blit=False)
 
     plt.close(fig)  # keep the static PNG from appearing
     anim.save(f"{name}.mp4", writer="ffmpeg", dpi=150)
+
+    print("Rendering complete!")

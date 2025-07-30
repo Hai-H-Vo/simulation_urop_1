@@ -146,12 +146,20 @@ def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
         dt (float)      : Floating point number specifying the timescale (step size) of the simulation.
         N (int)         : Integer number specifying the number of particles in the simulation
 
+    Extra inputs:
+        stochastic (bool)   : True if simulation should be stochastic. Defaults to True
+
     Outputs:
         init_fn, step_fn (funcs): functions to initialize the simulation and to timestep
             the simulation
     """
     # force_fn = jit(quantity.canonicalize_force(energy_or_force_fn))
     force_fn = energy_or_force_fn
+
+    if 'stochastic' in sim_kwargs:
+        stochastic = sim_kwargs['stochastic']
+    else:
+        stochastic = True
 
     def init_fn(pos, radius, **kwargs):
         """
@@ -204,8 +212,12 @@ def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
         dstate = force_fn(state)
 
         # stochastic impl
-        key, split = random.split(state.key)
-        svelocity = random.uniform(split, (N, 2), minval=-1.0, maxval=1.0)
+        if stochastic:
+            key, split = random.split(state.key)
+            svelocity = random.uniform(split, (N, 2), minval=-1.0, maxval=1.0)
+        else:
+            key = state.key
+            svelocity = np.zeros((N, 2))
 
         return PedestrianState(
             shift_fn(state.position, state.velocity * dt),

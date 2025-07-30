@@ -143,8 +143,8 @@ def init_goal_speed(key, N, speed_mean=1.3, speed_var=0.3):
     s.d speed_var, and truncated to fall into [speed_mean - speed_var, speed_mean + speed_var]
     """
     return speed_mean + speed_var * random.truncated_normal(key,
-                                                            lower=-speed_var,
-                                                            upper=+speed_var,
+                                                            lower=-1,
+                                                            upper=+1,
                                                             shape=(N,))
 
 @jit
@@ -254,6 +254,13 @@ def ttc_force_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
    return np.sum(normalize_cap(force_fn(dpos, V, V, R, k, t_0), 5), axis=1)
    # return force_fn(dpos, V, V, R, k, t_0)
    # return np.sum(force_fn(dpos, V, V, R, k, t_0), axis = 1)
+
+def _ttc_force_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
+   force_fn = vmap(vmap(ttc_force, (0, 0, None, None, None, None)), (0, None, 0, None, None, None))
+
+   dpos = space.map_product(displacement)(pos, pos)
+
+   return np.sum(force_fn(dpos, V, V, R, k, t_0), axis=1)
 
 def goal_velocity_force(state):
    if state.goal_orientation is None:
