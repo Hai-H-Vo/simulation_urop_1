@@ -25,7 +25,6 @@ from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 
 
 N = 300
-
 dt = 0.005
 delta = 50
 box_size = 40
@@ -82,7 +81,7 @@ state = init(pos, 0.1, key=V_key, goal_orientation=goal_orientation)
 positions = []
 thetas = []
 
-for i in range(1000):
+for i in range(1250):
   print(f"Current loop: {i}")
   state = lax.fori_loop(0, delta, step, state)
 
@@ -91,4 +90,4 @@ for i in range(1000):
 
 print(state)
 
-render(box_size, positions, dt, delta, 'pedestrian_hallway', extra=thetas, limits=(0, 2 * onp.pi))
+render(box_size, positions, dt, delta, 'pedestrian_hallway', extra=thetas, limits=(0, 2 * onp.pi), walls=[wall_low, wall_up])

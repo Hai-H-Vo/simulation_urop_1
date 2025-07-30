@@ -4,7 +4,7 @@ from jax_md import space
 from jax import lax
 import numpy as onp
 
-N = 10000
+N = 1000
 dt = 0.0176
 delta = 25
 box_size = 100
@@ -25,4 +25,4 @@ for i in range(100):
   positions += [state.position]
   thetas += [state.theta]
 
-render.render(box_size, positions, dt, delta, 'chiral_test', extra=thetas, limits=(0, 2 * onp.pi))
+render.render(box_size, positions, dt, delta, 'chiral_test_2', extra=thetas, limits=(0, 2 * onp.pi))
