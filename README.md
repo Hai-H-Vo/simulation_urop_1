@@ -3,7 +3,7 @@
 
 The function of each file is listed here:
 
-**__init__.py**: required to make the simulator dir a package? 
+**\_\_init\_\_.py**: required to make the simulator dir a package? 
 
 **dynamics.py**: general dynamics framework. *dynamics* fns returns an initializer and a step function that increments the system.
 
