@@ -17,7 +17,8 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from utils import normal, align_tot, angle_correct, init_goal_speed
+from .utils import normal, angle_correct, init_goal_speed
+from .force import align_tot
 
 
 # CHIRAL PARTICLES
@@ -134,14 +135,14 @@ class CircleWall(Wall):
         self.center = center
         self.radius = radius
 
-def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
+def pedestrian(shift_fn, force_fn, dt, N, **sim_kwargs):
     """
     Simulation of pedestrian models
 
     Inputs:
         shift_fn (func)             : returned by jax_md.space
         displacement_fn (func)      : returned by jax_md.space
-        energy_or_force_fn (func)   : a function characterizing the interaction between
+        force_fn (func) : a function characterizing the interaction between
                                     pedestrians
         dt (float)      : Floating point number specifying the timescale (step size) of the simulation.
         N (int)         : Integer number specifying the number of particles in the simulation
@@ -154,7 +155,7 @@ def pedestrian(shift_fn, energy_or_force_fn, dt, N, **sim_kwargs):
             the simulation
     """
     # force_fn = jit(quantity.canonicalize_force(energy_or_force_fn))
-    force_fn = energy_or_force_fn
+    # force_fn = energy_or_force_fn
 
     if 'stochastic' in sim_kwargs:
         stochastic = sim_kwargs['stochastic']

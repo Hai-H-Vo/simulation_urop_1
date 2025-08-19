@@ -19,7 +19,8 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from simulator.utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force
+from simulator.utils import normal, goal_velocity_force
+from simulator.force import ttc_force_tot, wall_energy_tot
 from simulator.render import render
 from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 
@@ -44,27 +45,12 @@ wall3 = StraightWall(ul, ur)
 wall4 = StraightWall(lr, ur)
 
 def energy_fn(pos, radius):
-    ll = np.array([0., 0.])
-    ul = np.array([0., box_size])
-    lr = np.array([box_size, 0.])
-    ur = np.array([box_size, box_size])
-    wall1 = StraightWall(ll, ul)
-    wall2 = StraightWall(ll, lr)
-    wall3 = StraightWall(ul, ur)
-    wall4 = StraightWall(lr, ur)
     return wall_energy_tot(pos, wall1, radius, displacement) + wall_energy_tot(pos, wall2, radius, displacement) + wall_energy_tot(pos, wall3, radius, displacement) + wall_energy_tot(pos, wall4, radius, displacement)
 
 def force_fn(state):
     wall_force = quantity.force(partial(energy_fn, radius=state.radius))
     body_force = quantity.force(energy.soft_sphere_pair(displacement, sigma=2.*state.radius))
-    # return PedestrianState(ttc_force_tot(state.position, state.velocity, state.radius, displacement, 1.5, 3) + wall_force(state.position), None, None, None)
-    # return PedestrianState(ttc_force_tot(state.position, state.velocity, state.radius, displacement, 1.5, 3), None, None, None)
-    # return PedestrianState(wall_force(state.position), None, None, None)
-    # return PedestrianState(body_force(state.position), None, None, None)
-    # return PedestrianState(wall_force(state.position) + body_force(state.position), None, None, None)
     return PedestrianState(ttc_force_tot(state.position, state.velocity, state.radius, displacement, 1.5, 3) + body_force(state.position) + wall_force(state.position) + goal_velocity_force(state), None, None, None, None, None)
-
-
 
 init, step = pedestrian(shift, force_fn, dt, N)
 
@@ -75,7 +61,6 @@ state = init(pos, 0.1, key=V_key)
 positions = []
 thetas = []
 
-# for i in range(10):
 for i in range(2000):
   print(f"Current loop: {i}")
   state = lax.fori_loop(0, delta, step, state)
@@ -85,4 +70,19 @@ for i in range(2000):
 
 print(state)
 
-render(box_size, positions, dt, delta, 'pedestrian_test', extra=thetas, limits=(0, 2 * onp.pi))
+# MP4 PRODUCTION
+# render(box_size, positions, dt, delta, 'pedestrian_test', extra=thetas, limits=(0, 2 * onp.pi))
+
+# NPY PRODUCTION
+
+np_positions = np.array(positions)
+np_orientations = np.array(thetas)
+time_step = np.array(delta * dt)
+
+np_wall1 = np.array([ll, ul])
+np_wall2 = np.array([ll, lr])
+np_wall3 = np.array([ul, ur])
+np_wall4 = np.array([lr, ur])
+np_walls = np.array([np_wall1, np_wall2, np_wall3, np_wall4])
+
+np.savez("pedestrian_collective", positions = np_positions, orientations = np_orientations, walls = np_walls, time_step = time_step)

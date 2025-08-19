@@ -19,7 +19,8 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from simulator.utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force
+from simulator.utils import normal, goal_velocity_force
+from simulator.force import ttc_force_tot, wall_energy_tot
 from simulator.render import render
 from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 
@@ -90,4 +91,16 @@ for i in range(1250):
 
 print(state)
 
-render(box_size, positions, dt, delta, 'pedestrian_hallway', extra=thetas, limits=(0, 2 * onp.pi), walls=[wall_low, wall_up])
+# MP4 PRODUCTION
+# render(box_size, positions, dt, delta, 'pedestrian_hallway', extra=thetas, limits=(0, 2 * onp.pi), walls=[wall_low, wall_up])
+
+# NPZ PRODUCTION
+np_positions = np.array(positions)
+np_orientations = np.array(thetas)
+time_step = np.array(delta * dt)
+
+np_wall_low = np.array([ll, lr])
+np_wall_up = np.array([ul, ur])
+np_walls = np.array([np_wall_low, np_wall_up])
+
+np.savez("pedestrian_hallway", positions = np_positions, goal_orientations = np_orientations, walls = np_walls, time_step=time_step)
