@@ -11,6 +11,6 @@ The function of each file is listed here:
 
 **utils.py**: force and energy functions for 2-body interactions, and some data processing tools
 
-**force.py**: force and energy functions for many-body interactions, basis representation for a general force *F*(v, d)
+**force.py**: force and energy functions for many-body interactions, basis representation for a general force **F**(v, d)
 
 **environment.yml**: virtual env documentation
