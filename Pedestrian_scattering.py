@@ -19,7 +19,8 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from simulator.utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force, _ttc_force_tot
+from simulator.utils import normal, goal_velocity_force, _ttc_force_tot
+from simulator.force import ttc_force_tot
 from simulator.render import render
 from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 

@@ -18,30 +18,11 @@ vectorize = np.vectorize
 
 from functools import partial
 
+from .basis import LegendrePolynomial, LaguerrePolynomial
+
 # from typing import Union, Callable
 
 # SPACES
-
-# def closed_box(box_size):
-#    def displacement_fn(R_1, R_2, **unused_kwargs):
-#       dR = R_1 - R_2
-#       return dR
-
-#    def shift_fn(R, dR, **unused_kwargs):
-#       return R + dR
-
-#    return displacement_fn, shift_fn
-
-# DYNAMICS
-
-# @vmap
-# def angle_sum(theta1, theta2):
-#     init_theta = theta1 + theta2
-#     return np.where(
-#         init_theta < 0,
-#         init_theta + 2 * onp.pi,
-#         np.where(init_theta > 2 * onp.pi, init_theta - 2 * onp.pi, init_theta),
-#     )
 
 @jit
 def angle_correct(theta):
@@ -51,18 +32,13 @@ def angle_correct(theta):
         np.where(theta > 2 * onp.pi, theta - 2 * onp.pi, theta),
     )
 
-# @jit
-# def normalize_cap(v, v_lim=0):
-#     v_norm = np.linalg.norm(v, axis=1, keepdims=True)
-#     return np.where(v_norm > v_lim, v/v_norm, v)
-
-def _normalize_cap(v, v_lim=0):
+def _normalize(v, v_lim=0):
     v_norm = np.linalg.norm(v, keepdims=True)
     return np.where(v_norm > v_lim, v/v_norm, v)
 
 @jit
 def normalize_cap(v, v_lim=0):
-   return vmap(_normalize_cap, (0, None))(v, v_lim)
+   return vmap(_normalize, (0, None))(v, v_lim)
 
 # @partial(jit, static_argnums=1)
 def wall_dist(pos, start, end, displacement):
@@ -104,9 +80,6 @@ def wall_energy(pos, wall, radius, displacement):
    # return 5 * radius / (np.linalg.norm(dist) - radius)
    return 1 / (3 * (np.linalg.norm(dist) / radius) ** 3)
 
-def wall_energy_tot(poss, wall, radius, displacement):
-   return np.sum(vmap(wall_energy, (0, None, None, None))(poss, wall, radius, displacement))
-
 # CHIRAL PARTICLES
 
 @vmap
@@ -118,15 +91,6 @@ def align_fn(dr, theta_i, theta_j):
    align_spd = np.sin(theta_j - theta_i)
    dR = space.distance(dr)
    return np.where(dR < 1., align_spd, 0.)
-
-def align_tot(R, theta, displacement):
-   # Alignment factor
-   align = vmap(vmap(align_fn, (0, None, 0)), (0, 0, None))
-
-   # Displacement between all points
-   dR = space.map_product(displacement)(R, R)
-
-   return np.sum(align(dR, theta, theta), axis=1)
 
 # PEDESTRIANS
 
@@ -226,35 +190,6 @@ def ttc_tot(pos, V, R, displacement):
 
    return ttc(dpos, V, V, R, I, J)
 
-def ttc_potential_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
-   """
-   The potential energy of pedestrian interaction, according to
-   the anticipatory interaction law detailed in [1].
-
-   Inputs:
-      pos (ndarray)     : position vector of all particles
-      V (ndarray)       : velocity vector "   "      "
-      R (float)         : collision radius of a particle
-      displacement (fn) : displacement function produced by jax_md.space
-      k, t_0 (floats)   : interaction params
-
-   Output:
-      ndarray of potential energy of each particle
-
-   [1] I. Karamouzas, B. Skinner, Stephen J. Guy.
-   "Universal Power Law Governing Pedestrian Interactions"
-   """
-   return np.array(np.sum(smap._diagonal_mask(ttc_potential_fn(k, ttc_tot(pos, V, R, displacement), t_0))) / 2)
-
-def ttc_force_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
-   force_fn = vmap(vmap(ttc_force, (0, 0, None, None, None, None)), (0, None, 0, None, None, None))
-
-   dpos = space.map_product(displacement)(pos, pos)
-
-   return np.sum(normalize_cap(force_fn(dpos, V, V, R, k, t_0), 5), axis=1)
-   # return force_fn(dpos, V, V, R, k, t_0)
-   # return np.sum(force_fn(dpos, V, V, R, k, t_0), axis = 1)
-
 def _ttc_force_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
    force_fn = vmap(vmap(ttc_force, (0, 0, None, None, None, None)), (0, None, 0, None, None, None))
 
@@ -266,3 +201,156 @@ def goal_velocity_force(state):
    if state.goal_orientation is None:
       return (normal(state.goal_speed, state.orientation()) - state.velocity) / .5
    return (normal(state.goal_speed, state.goal_orientation) - state.velocity) / .5
+
+# TEST SECTION
+
+import time
+
+# BASIS POLYNOMIAL EXPANSION
+
+# Issues: depend on onp funcs, for loops => not compatible w/ JAX, but can be fixed.
+# Requires creating ijk Polynomial objs => inefficient?
+def general_force_generator_TEST_1(weight_paral_arr, weight_perpen_arr, v_0, d_0):
+   init_start_time = time.time()
+   # weight tensor has shape (mu_0, mu_1, mu_2)
+   def term_generator(i, j, k):
+      lag_i = LaguerrePolynomial(np.array([0] * (i - 1) + [1]))
+      lag_j = LaguerrePolynomial(np.array([0] * (j - 1) + [1]))
+      leg_k = LegendrePolynomial(np.array([0] * (k - 1) + [1]))
+
+      def term(scaled_v, scaled_pos, proj):
+         return lag_i(scaled_v) * lag_j(scaled_pos) * leg_k(proj) * np.exp(-(scaled_v + scaled_pos)/2)
+
+      return term
+
+   def general_force_magnitude(scaled_v, scaled_pos, proj, weight_arr):
+      # NOT COMPATIBLE WITH JAX (FOR NOW)
+      # operation to sum the terms while multiplied over the weights
+      magnitude = 0.
+      for idw, weight in onp.ndenumerate(weight_arr):
+         i, j, k = idw
+         magnitude += weight * term_generator(i, j, k)(scaled_v, scaled_pos, proj)
+      return magnitude
+
+   def general_force(dpos, V_i, V_j):
+      start_time = time.time()
+
+      dv = V_i - V_j
+
+      n_pos =  np.linalg.norm(dpos)
+      n_v = np.linalg.norm(dv)
+
+      unit_pos = dpos / n_pos
+      unit_v = dv / n_v
+
+      scaled_pos = n_pos / d_0
+      scaled_v = n_v / v_0
+      proj = np.dot(dv, dpos) / (scaled_pos * scaled_v)
+
+      # force calc
+      force = (general_force_magnitude(scaled_v, scaled_pos, proj, weight_paral_arr) * unit_v +
+              general_force_magnitude(scaled_v, scaled_pos, proj, weight_perpen_arr) * np.matmul(np.identity(2) - np.matmul(unit_v, np.transpose(unit_v)), unit_pos))
+
+      end_time = time.time()
+      print(f"test_1_runtime = {end_time - start_time}")
+
+      return force
+
+   init_end_time = time.time()
+   print(f"test_1_init_runtime = {init_end_time - init_start_time}")
+
+   return general_force
+
+# Issues: Use tuple of funcs to reduce computation cost => Indexing into tuple is not supported by jitted funcs!
+# Computation cost not significantly reduced => lol im js gnna use the above fn
+def general_force_generator_TEST_2(weight_paral_arr, weight_perpen_arr, v_0, d_0):
+   init_start_time = time.time()
+
+   # arrs are assumed to have shape (i, j, k)
+   # identify maximum degrees of each basis fn
+   i, j, k = np.max(np.array((weight_paral_arr.shape, weight_perpen_arr.shape)), axis=0)
+   ij = np.max(np.array([i, j]))
+
+   # generate enough basis functions for use:
+   # PAST_ERROR: unsupported operand type(s) for *: 'list' and 'ArrayImpl'
+   # laguerres = [LaguerrePolynomial(np.array([0] * l + [1])) for l in np.arange(0, ij + 1)]
+   laguerres = tuple([LaguerrePolynomial(np.array([0] * l + [1])) for l in range(0, ij + 1)])
+   legendres = tuple([LegendrePolynomial(np.array([0] * l + [1])) for l in range(0, k + 1)])
+
+   # unroll arrays
+   paral_shape = np.array(weight_paral_arr.shape)
+   perpen_shape = np.array(weight_perpen_arr.shape)
+   weights_paral = weight_paral_arr.flatten()
+   weights_perpen = weight_perpen_arr.flatten()
+
+   # # indexer for flattened array:
+   # def indexer(idx, paral):
+   #    a, b, c = np.where(paral, paral_shape, perpen_shape)
+   #    u2 = idx // (a * b)
+   #    u = idx % (a * b)
+   #    u1 = u // a
+   #    u0 = u % a
+   #    return u0, u1, u2
+
+   # # operation to sum the terms while multiplied over the weights
+   # # ERROR: TracerIntegerConversionError
+   # # PROPOSED_FIX: make laguerres and legendres into static arguments
+   # @partial(jit, static_argnames=['laguerres', 'legendres', 'idx'])
+   # def full_term(idx, magn, paral, scaled_v, scaled_pos, proj, laguerres=laguerres, legendres=legendres):
+   #    u0, u1, u2 = indexer(idx, paral)
+   #    magn += laguerres[u0](scaled_v) * laguerres[u1](scaled_pos) * legendres[u2](proj) * np.exp(-(scaled_v + scaled_pos)/2)
+   #    return magn
+
+   # @partial(jit, static_argnames=['paral'])
+   def general_force_magnitude(scaled_v, scaled_pos, proj, weights_arr, paral):
+      #weights_arr is the flattened weight array, with shape (size,)
+      #indexer for flattened array:
+      def indexer(idx):
+         a, b, c = np.where(paral, paral_shape, perpen_shape)
+         u2 = idx // (a * b)
+         u = idx % (a * b)
+         u1 = u // a
+         u0 = u % a
+         return u0, u1, u2
+
+      #operation to sum the terms while multiplied over the weights
+      #ERROR: TracerIntegerConversionError
+      #PROPOSED_FIX: make laguerres and legendres into static arguments
+      def term(idx, magn):
+         u0, u1, u2 = indexer(idx)
+         magn += weights_arr[idx] * laguerres[u0](scaled_v) * laguerres[u1](scaled_pos) * legendres[u2](proj) * np.exp(-(scaled_v + scaled_pos)/2)
+         return magn
+
+      # term = partial(full_term, paral=paral, scaled_v=scaled_v, scaled_pos=scaled_pos, proj=proj)
+      magnitude = 0.
+      for idx in range(weights_arr.size):
+         magnitude = term(idx, magnitude)
+      # magnitude = lax.fori_loop(0, weights_arr.size, term, 0.)
+      return magnitude
+
+   def general_force(dpos, V_i, V_j):
+      start_time = time.time()
+
+      dv = V_i - V_j
+
+      n_pos =  np.linalg.norm(dpos)
+      n_v = np.linalg.norm(dv)
+
+      unit_pos = dpos / n_pos
+      unit_v = dv / n_v
+
+      scaled_pos = n_pos / d_0
+      scaled_v = n_v / v_0
+      proj = np.dot(dv, dpos) / (scaled_pos * scaled_v)
+
+      force = (general_force_magnitude(scaled_v, scaled_pos, proj, weights_paral, True) * unit_v +
+              general_force_magnitude(scaled_v, scaled_pos, proj, weights_perpen, False) * np.matmul(np.identity(2) - np.matmul(unit_v, np.transpose(unit_v)), unit_pos))
+
+      end_time = time.time()
+      print(f"test_2_runtime = {end_time - start_time}")
+      return force
+
+   init_end_time = time.time()
+   print(f"test_2_init_runtime = {init_end_time - init_start_time}")
+
+   return general_force

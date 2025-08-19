@@ -19,7 +19,8 @@ from collections import namedtuple
 vectorize = np.vectorize
 
 from functools import partial
-from simulator.utils import normal, ttc_force_tot, wall_energy_tot, goal_velocity_force
+from simulator.utils import normal, goal_velocity_force
+from simulator.force import ttc_force_tot
 from simulator.render import render
 from simulator.dynamics import pedestrian, PedestrianState, StraightWall
 
@@ -30,7 +31,6 @@ delta = 20
 frame_size = 40
 lane_width = 5
 key = random.PRNGKey(0)
-# displacement, shift = space.periodic(box_size)
 displacement, shift = space.free()
 
 V_key, pos_key = random.split(key)
@@ -72,4 +72,11 @@ for i in range(1500):
 
 print(state)
 
-render(frame_size, positions, dt, delta, 'pedestrian_crossing', extra=thetas, limits=(0, 2 * onp.pi))
+# MP4 PRODUCTION
+# render(frame_size, positions, dt, delta, 'pedestrian_crossing', extra=thetas, limits=(0, 2 * onp.pi))
+
+# NPZ PRODUCTION
+np_positions = np.array(positions)
+np_orientations = np.array(thetas)
+time_step = np.array(delta * dt)
+np.savez("pedestrian_crossing", positions = np_positions, goal_orientations = np_orientations, time_step=time_step)
