@@ -77,11 +77,6 @@ for i in range(CYCLE_NUMS):
   updates, opt_state = optimizer.update(grads, opt_state)
   params = optax.apply_updates(params, updates)
 
-# allow_int = False:
-# TypeError: grad requires real- or complex-valued inputs (input dtype that is a sub-dtype of np.inexact), but got int64.
-# If you want to use Boolean- or integer-valued inputs, use vjp or set allow_int to True.
-
-# allow_int = True:
 # FloatingPointError: invalid value (nan) encountered in mul
 # When differentiating the code at the top of the callstack:
 # /Users/vohoanghai/Documents/MIT/UROP_1/Work/General Simuls/simulator/force.py:105:15 (general_force_generator.<locals>.general_force)
