@@ -18,7 +18,7 @@ vectorize = np.vectorize
 
 from functools import partial
 
-from .basis import LegendrePolynomial, LaguerrePolynomial
+from .basis import LegendrePolynomial, LaguerrePolynomial, LegendreBase, LaguerreBase
 
 # from typing import Union, Callable
 
@@ -167,9 +167,9 @@ def ttc_force(dpos, V_i, V_j, R, k, t_0):
    t = (b - np.sqrt(det)) / a
 
    return np.where(np.logical_or(det < 0, np.logical_and(a < 0.001, a > -0.001)),
-                   np.array([0, 0]),
+                   np.array([0., 0.]),
                    np.where(np.logical_or(t < 0, t > t_max),
-                            np.array([0, 0]),
+                            np.array([0., 0.]),
                             - k*np.exp(-t/t_0)*(dv - (dv * b - dpos * a)/(np.sqrt(det)))/(a*np.square(t))*(2/t+ 1/t_0)))
 
 @jit
@@ -353,4 +353,64 @@ def general_force_generator_TEST_2(weight_paral_arr, weight_perpen_arr, v_0, d_0
    init_end_time = time.time()
    print(f"test_2_init_runtime = {init_end_time - init_start_time}")
 
+   return general_force
+
+
+def general_force_generator_TEST_3(weight_paral_arr, weight_perpen_arr, v_0, d_0):
+   init_start_time = time.time()
+   # weight tensor has shape (mu_0, mu_1, mu_2)
+
+   def general_force_magnitude(scaled_v, scaled_pos, proj, weight_arr):
+      # PROPOSED SOLUTION: USE TENSORDOT
+      # IDEA:
+      # lag_i = np.array([LaguerrePolynomial(np.array([0] * (i - 1) + [1]))(scaled_v) for i in range(I)])
+      # lag_j = np.array([LaguerrePolynomial(np.array([0] * (j - 1) + [1]))(scaled_pos) for j in range(J)])
+      # leg_k = np.array([LegendrePolynomial(np.array([0] * (k - 1) + [1]))(proj) for k in range(K)])
+
+      I, J, K = weight_arr.shape
+      lag_i = np.zeros(I)
+      lag_j = np.zeros(J)
+      leg_k = np.zeros(K)
+
+      # ISSUE: idx is a JaxprTracer!
+      def updater(idx, arr, poly_type, val):
+         # True == Laguerre
+         # False == Legendre
+         new_arr = np.where(poly_type,
+                            arr.at[idx].set(LaguerreBase(idx)(val)),
+                            arr.at[idx].set(LegendreBase(idx)(val)))
+         return new_arr
+
+      lag_i = lax.fori_loop(0, I, partial(updater, poly_type=True, val=scaled_v), lag_i)
+      lag_j = lax.fori_loop(0, J, partial(updater, poly_type=True, val=scaled_pos), lag_j)
+      leg_k = lax.fori_loop(0, K, partial(updater, poly_type=False, val=proj), leg_k)
+
+      expansion = weight_arr * np.tensordot(np.tensordot(lag_i, lag_j, axes=0), leg_k, axes=0)
+
+      return np.sum(expansion) * np.exp(-(scaled_v + scaled_pos)/2)
+
+   def general_force(dpos, V_i, V_j):
+      start_time = time.time()
+      dv = V_i - V_j
+
+      n_pos =  np.linalg.norm(dpos)
+      n_v = np.linalg.norm(dv)
+
+      unit_pos = dpos / n_pos
+      unit_v = dv / n_v
+
+      scaled_pos = n_pos / d_0
+      scaled_v = n_v / v_0
+      proj = np.dot(dv, dpos) / (scaled_pos * scaled_v)
+
+      # force calc
+      force = (general_force_magnitude(scaled_v, scaled_pos, proj, weight_paral_arr) * unit_v +
+              general_force_magnitude(scaled_v, scaled_pos, proj, weight_perpen_arr) * np.matmul(np.identity(2) - np.matmul(unit_v, np.transpose(unit_v)), unit_pos))
+
+      end_time = time.time()
+      print(f"test_3_runtime = {end_time - start_time}")
+      return force
+
+   init_end_time = time.time()
+   print(f"test_3_init_runtime = {init_end_time - init_start_time}")
    return general_force
