@@ -18,7 +18,7 @@ vectorize = np.vectorize
 
 from functools import partial
 
-from .basis import LegendrePolynomial, LaguerrePolynomial
+from .basis import LegendrePolynomial, LaguerrePolynomial, LaguerreBase, LegendreBase
 from .utils import wall_energy, align_fn, ttc_potential_fn, ttc_tot, ttc_force, normalize_cap
 
 # WALL INTERACTIONS
@@ -68,28 +68,30 @@ def ttc_force_tot(pos, V, R, displacement, k=1.5, t_0=3.0):
 
 # BASIS POLYNOMIAL EXPANSION
 
-# Issues: depend on onp funcs, for loops => not compatible w/ JAX, but can be fixed.
-# Requires creating ijk Polynomial objs => inefficient?
 def general_force_generator(weight_paral_arr, weight_perpen_arr, v_0, d_0):
    # weight tensor has shape (mu_0, mu_1, mu_2)
-   def term_generator(i, j, k):
-      lag_i = LaguerrePolynomial(np.array([0] * (i - 1) + [1]))
-      lag_j = LaguerrePolynomial(np.array([0] * (j - 1) + [1]))
-      leg_k = LegendrePolynomial(np.array([0] * (k - 1) + [1]))
-
-      def term(scaled_v, scaled_pos, proj):
-         return lag_i(scaled_v) * lag_j(scaled_pos) * leg_k(proj) * np.exp(-(scaled_v + scaled_pos)/2)
-
-      return term
 
    def general_force_magnitude(scaled_v, scaled_pos, proj, weight_arr):
-      # NOT COMPATIBLE WITH JAX (FOR NOW)
-      # operation to sum the terms while multiplied over the weights
-      magnitude = 0.
-      for idw, weight in onp.ndenumerate(weight_arr):
-         i, j, k = idw
-         magnitude += weight * term_generator(i, j, k)(scaled_v, scaled_pos, proj)
-      return magnitude
+      I, J, K = weight_arr.shape
+      lag_i = np.zeros(I)
+      lag_j = np.zeros(J)
+      leg_k = np.zeros(K)
+
+      def updater(idx, arr, poly_type, val):
+         # True == Laguerre
+         # False == Legendre
+         new_arr = np.where(poly_type,
+                            arr.at[idx].set(LaguerreBase(idx)(val)),
+                            arr.at[idx].set(LegendreBase(idx)(val)))
+         return new_arr
+
+      lag_i = lax.fori_loop(0, I, partial(updater, poly_type=True, val=scaled_v), lag_i)
+      lag_j = lax.fori_loop(0, J, partial(updater, poly_type=True, val=scaled_pos), lag_j)
+      leg_k = lax.fori_loop(0, K, partial(updater, poly_type=False, val=proj), leg_k)
+
+      expansion = weight_arr * np.tensordot(np.tensordot(lag_i, lag_j, axes=0), leg_k, axes=0)
+
+      return np.sum(expansion) * np.exp(-(scaled_v + scaled_pos)/2)
 
    def general_force(dpos, V_i, V_j):
       dv = V_i - V_j
