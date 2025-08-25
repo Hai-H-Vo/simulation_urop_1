@@ -73,21 +73,21 @@ def general_force_generator(weight_paral_arr, weight_perpen_arr, v_0, d_0):
 
    def general_force_magnitude(scaled_v, scaled_pos, proj, weight_arr):
       I, J, K = weight_arr.shape
-      lag_i = np.zeros(I)
-      lag_j = np.zeros(J)
-      leg_k = np.zeros(K)
+      lag_i = np.arange(0, I)
+      lag_j = np.arange(0, J)
+      leg_k = np.arange(0, K)
 
-      def updater(idx, arr, poly_type, val):
+      def updater(arr, idx, poly_type, val):
          # True == Laguerre
          # False == Legendre
          new_arr = np.where(poly_type,
                             arr.at[idx].set(LaguerreBase(idx)(val)),
                             arr.at[idx].set(LegendreBase(idx)(val)))
-         return new_arr
+         return new_arr, idx
 
-      lag_i = lax.fori_loop(0, I, partial(updater, poly_type=True, val=scaled_v), lag_i)
-      lag_j = lax.fori_loop(0, J, partial(updater, poly_type=True, val=scaled_pos), lag_j)
-      leg_k = lax.fori_loop(0, K, partial(updater, poly_type=False, val=proj), leg_k)
+      lag_i = lax.scan(partial(updater, poly_type=True, val=scaled_v), lag_i, lag_i)[0]
+      lag_j = lax.scan(partial(updater, poly_type=True, val=scaled_pos), lag_j, lag_j)[0]
+      leg_k = lax.scan(partial(updater, poly_type=False, val=proj), leg_k, leg_k)[0]
 
       expansion = weight_arr * np.tensordot(np.tensordot(lag_i, lag_j, axes=0), leg_k, axes=0)
 
