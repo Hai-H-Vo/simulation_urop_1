@@ -81,10 +81,7 @@ class LegendreBase(eqx.Module):
             'degree' : 2
         }
 
-        def cond_fun(val):
-            return val['degree'] <= self.degree
-
-        def _body_fun(val, inp):
+        def _body_fun(_, val, inp):
             p_prev = val['prev']
             p_curr = val['curr']
             n = val['degree']
@@ -101,7 +98,7 @@ class LegendreBase(eqx.Module):
 
         body_fun = partial(_body_fun, inp=inputs)
 
-        final_val = lax.while_loop(cond_fun, body_fun, init_val)
+        final_val = lax.fori_loop(2, self.degree + 1, body_fun, init_val)
 
         return final_val['result']
 
@@ -132,10 +129,7 @@ class LaguerreBase(eqx.Module):
             'degree' : 2
         }
 
-        def cond_fun(val):
-            return val['degree'] <= self.degree
-
-        def _body_fun(val, inp):
+        def _body_fun(_, val, inp):
             p_prev = val['prev']
             p_curr = val['curr']
             n = val['degree']
@@ -152,6 +146,6 @@ class LaguerreBase(eqx.Module):
 
         body_fun = partial(_body_fun, inp=inputs)
 
-        final_val = lax.while_loop(cond_fun, body_fun, init_val)
+        final_val = lax.fori_loop(2, self.degree + 1, body_fun, init_val)
 
         return final_val['result']

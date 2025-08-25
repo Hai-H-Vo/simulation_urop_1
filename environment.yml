@@ -330,6 +330,7 @@ dependencies:
       - dm-haiku==0.0.14
       - e3nn-jax==0.20.7
       - einops==0.8.1
+      - equinox==0.13.0
       - etils==1.12.2
       - ffmpeg==1.4
       - flax==0.10.6
@@ -341,6 +342,7 @@ dependencies:
       - jax-cuda12-plugin==0.6.2
       - jax-md==0.2.8
       - jaxlib==0.6.2
+      - jaxtyping==0.3.2
       - jmp==0.0.4
       - joblib==1.5.1
       - jraph==0.0.6.dev0
@@ -385,4 +387,5 @@ dependencies:
       - tqdm==4.67.1
       - treescope==0.1.9
       - uncertainties==3.2.3
+      - wadler-lindig==0.1.7
 prefix: /home/haivo/.conda/envs/urop1_env
